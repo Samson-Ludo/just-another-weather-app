@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import "./App.css";
 
-// google map api key = AIzaSyB8WdX8VJtKQAiAvFlWdYTbIphsArb_3VI
 import ReactWeather, { useOpenWeather } from "react-open-weather";
 import useGeolocation from "react-hook-geolocation";
 import Geocode from "react-geocode";
@@ -15,77 +14,40 @@ Geocode.setLocationType("ROOFTOP");
 // Enable or disable logs. Its optional.
 Geocode.enableDebug();
 
-// get geolocation
-let geolocation;
-
-// define lat and lon in local storage
-let localStoreLat = localStorage.getItem("lat");
-let localStoreLon = localStorage.getItem("lon");
-
-const rememberLastLocation = () => {
-  if (localStoreLat && localStoreLon)
-    return { lat: localStoreLat, lon: localStoreLon };
-  else {
-    // else get current location, save and retrieve to and from localStorage
-    localStorage.setItem("lat", geolocation.latitude);
-    localStorage.setItem("lon", geolocation.longitude);
-    return {
-      lat: localStorage.getItem("lat"),
-      lon: localStorage.getItem("lon"),
-    };
-  }
+const GetUserLocation = () => {
+  const { latitude, longitude, error } = useGeolocation();
+  return !error
+    ? { lat: latitude, lon: longitude }
+    : "cant't find user location";
 };
 
-const App = () => {
-  geolocation = useGeolocation();
+const CoordToAddress = (lat, lon) => {
+  const [address, setAddress] = useState("");
 
-  const [cityName, setCityName] = useState("");
-  const [unit, setUnit] = useState("default");
-  const [unitButtonText, setUnitButtonText] = useState("Change to Fahrenheit");
-  const [locationName, setLocationName] = useState("");
-  const [coords, setCoords] = useState({
-    lat: geolocation.latitude,
-    lon: geolocation.longitude,
-  });
-
-  // on page load
-  useEffect(() => {
-    setCoords(rememberLastLocation());
-  }, []);
-  // get location name
-  Geocode.fromLatLng(coords.lat, coords.lon).then(
+  Geocode.fromLatLng(lat, lon).then(
     (response) => {
-      let city, state, country;
-      // const address = response.results[0].formatted_address;
-      for (let i = 0; i < response.results[0].address_components.length; i++) {
-        for (
-          let j = 0;
-          j < response.results[0].address_components[i].types.length;
-          j++
-        ) {
-          switch (response.results[0].address_components[i].types[j]) {
-            case "locality":
-              city = response.results[0].address_components[i].long_name;
-              break;
-            case "administrative_area_level_1":
-              state = response.results[0].address_components[i].long_name;
-              break;
-            case "country":
-              country = response.results[0].address_components[i].long_name;
-              break;
-            default:
-              state = response.results[0].address_components[i].long_name;
-              country = response.results[0].address_components[i].long_name;
-          }
-        }
-      }
-      // console.log(city, state, country);
-      // console.log(address);
-      setLocationName(`${city}, ${state}, ${country}`);
+      const formattedAddress = response.results[0].formatted_address;
+      setAddress(formattedAddress);
     },
     (error) => {
       console.error(error);
     }
+  );
+
+  return address;
+};
+
+const App = () => {
+  const [cityName, setCityName] = useState("");
+  const [unit, setUnit] = useState("default");
+  const [unitButtonText, setUnitButtonText] = useState("Change to Fahrenheit");
+  const [coords, setCoords] = useState({});
+  const [locationName, setLocationName] = useState("");
+
+  const userLocation = GetUserLocation();
+  const userAddress = CoordToAddress(
+    GetUserLocation().lat,
+    GetUserLocation().lon
   );
 
   // handle city search
@@ -98,13 +60,12 @@ const App = () => {
         const { lat, lng } = response.results[0].geometry.location;
         localStorage.setItem("lat", lat);
         localStorage.setItem("lon", lng);
+        localStorage.setItem("locationName", cityName);
         setCoords({
           lat: localStorage.getItem("lat"),
           lon: localStorage.getItem("lon"),
         });
-        setLocationName(cityName);
-
-        console.log({ locationName, coords });
+        setLocationName(localStorage.getItem("locationName"));
       },
       (error) => {
         console.error(error);
@@ -122,11 +83,18 @@ const App = () => {
       : setUnitButtonText("Change to Fahrenheit");
   };
 
+  let lat = localStorage.getItem("lat");
+  let lon = localStorage.getItem("lon");
+  let location = localStorage.getItem("locationName");
+
+  let latitude = coords.lat ? coords.lat : lat ? lat : userLocation.lat;
+  let longitude = coords.lon ? coords.lon : lon ? lon : userLocation.lon;
+
   // get weather data for celsius
   let celsius = useOpenWeather({
     key: "741aa3002231e12860b14385a16f2fd1",
-    lat: coords.lat,
-    lon: coords.lon,
+    lat: latitude,
+    lon: longitude,
     lang: "en",
     unit: "metric", // values are (metric, standard, imperial)
   });
@@ -134,12 +102,11 @@ const App = () => {
   // get weather data for fahrenheit
   let fahrenheit = useOpenWeather({
     key: "741aa3002231e12860b14385a16f2fd1",
-    lat: coords.lat,
-    lon: coords.lon,
+    lat: latitude,
+    lon: longitude,
     lang: "en",
     unit: "imperial", // values are (metric, standard, imperial)
   });
-  console.log({ locationName, coords });
 
   const renderSwitch = (param) => {
     switch (param) {
@@ -150,7 +117,7 @@ const App = () => {
             errorMessage={fahrenheit.errorMessage}
             data={fahrenheit.data}
             lang="en"
-            locationLabel={locationName}
+            locationLabel={locationName || location || userAddress}
             unitsLabels={{ temperature: "F", windSpeed: "Km/h" }}
             showForecast
           />
@@ -162,7 +129,7 @@ const App = () => {
             errorMessage={celsius.errorMessage}
             data={celsius.data}
             lang="en"
-            locationLabel={locationName}
+            locationLabel={locationName || location || userAddress}
             unitsLabels={{ temperature: "C", windSpeed: "Km/h" }}
             showForecast
           />
@@ -176,7 +143,7 @@ const App = () => {
         <h2>Search for other cities</h2>
         <input
           type="text"
-          value={cityName}
+          value={cityName || location || userAddress}
           placeholder={"City, Country"}
           onChange={(e) => setCityName(e.target.value)}
         />

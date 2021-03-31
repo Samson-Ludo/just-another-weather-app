@@ -143,7 +143,7 @@ const App = () => {
         <h2>Search for other cities</h2>
         <input
           type="text"
-          value={cityName || location || userAddress}
+          value={cityName}
           placeholder={"City, Country"}
           onChange={(e) => setCityName(e.target.value)}
         />

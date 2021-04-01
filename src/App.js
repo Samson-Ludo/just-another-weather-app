@@ -6,7 +6,7 @@ import useGeolocation from "react-hook-geolocation";
 import Geocode from "react-geocode";
 
 // set Google Maps Geocoding API for purposes of quota management. Its optional but recommended.
-Geocode.setApiKey("AIzaSyBqFYFTfigmAePu0Edl9cTlebfd2p4rxa8");
+Geocode.setApiKey(process.env.REACT_APP_GEOCODING_API);
 // set response language. Defaults to english.
 Geocode.setLanguage("en");
 // set location_type filter . Its optional.
@@ -14,6 +14,7 @@ Geocode.setLocationType("ROOFTOP");
 // Enable or disable logs. Its optional.
 Geocode.enableDebug();
 
+// hook for getting user location coord
 const GetUserLocation = () => {
   const { latitude, longitude, error } = useGeolocation();
   return !error
@@ -21,18 +22,23 @@ const GetUserLocation = () => {
     : "cant't find user location";
 };
 
-const CoordToAddress = (lat, lon) => {
+// hook for getting user location name
+const CoordToAddress = () => {
   const [address, setAddress] = useState("");
 
-  Geocode.fromLatLng(lat, lon).then(
-    (response) => {
-      const formattedAddress = response.results[0].formatted_address;
-      setAddress(formattedAddress);
-    },
-    (error) => {
-      console.error(error);
-    }
-  );
+  const userLocation = GetUserLocation();
+
+  userLocation.lat
+    ? Geocode.fromLatLng(userLocation.lat, userLocation.lon).then(
+        (response) => {
+          const formattedAddress = response.results[0].formatted_address;
+          setAddress(formattedAddress);
+        },
+        (error) => {
+          console.error(error);
+        }
+      )
+    : console.log("loading...");
 
   return address;
 };
@@ -44,11 +50,11 @@ const App = () => {
   const [coords, setCoords] = useState({});
   const [locationName, setLocationName] = useState("");
 
+  // get user location coords
   const userLocation = GetUserLocation();
-  const userAddress = CoordToAddress(
-    GetUserLocation().lat,
-    GetUserLocation().lon
-  );
+
+  // get user location name
+  const userAddress = CoordToAddress();
 
   // handle city search
   const handleCitySearch = (e) => {
@@ -58,13 +64,19 @@ const App = () => {
     Geocode.fromAddress(cityName).then(
       (response) => {
         const { lat, lng } = response.results[0].geometry.location;
+
+        // save last location details in local storage
         localStorage.setItem("lat", lat);
         localStorage.setItem("lon", lng);
         localStorage.setItem("locationName", cityName);
+
+        // update location coords
         setCoords({
           lat: localStorage.getItem("lat"),
           lon: localStorage.getItem("lon"),
         });
+
+        // update location name
         setLocationName(localStorage.getItem("locationName"));
       },
       (error) => {
@@ -83,6 +95,7 @@ const App = () => {
       : setUnitButtonText("Change to Fahrenheit");
   };
 
+  // retrieve last location details in local storage
   let lat = localStorage.getItem("lat");
   let lon = localStorage.getItem("lon");
   let location = localStorage.getItem("locationName");
@@ -92,7 +105,7 @@ const App = () => {
 
   // get weather data for celsius
   let celsius = useOpenWeather({
-    key: "741aa3002231e12860b14385a16f2fd1",
+    key: process.env.REACT_APP_OPEN_WEATHER_API,
     lat: latitude,
     lon: longitude,
     lang: "en",
@@ -101,13 +114,14 @@ const App = () => {
 
   // get weather data for fahrenheit
   let fahrenheit = useOpenWeather({
-    key: "741aa3002231e12860b14385a16f2fd1",
+    key: process.env.REACT_APP_OPEN_WEATHER_API,
     lat: latitude,
     lon: longitude,
     lang: "en",
     unit: "imperial", // values are (metric, standard, imperial)
   });
 
+  // conditional rendering of weather report based on desried unit
   const renderSwitch = (param) => {
     switch (param) {
       case 1:
@@ -141,19 +155,23 @@ const App = () => {
     <div className="App">
       <form className="App-header">
         <h2>Search for other cities</h2>
+        {/* input city name  */}
         <input
           type="text"
           value={cityName}
           placeholder={"City, Country"}
           onChange={(e) => setCityName(e.target.value)}
         />
+        {/* search city  */}
         <button type="submit" onClick={handleCitySearch}>
           Search City
         </button>
         <hr />
+
+        {/* toggle units  */}
         <button onClick={handleUnitToggle}>{unitButtonText}</button>
       </form>
-      {/* render switch weather units  */}
+      {/* render switched weather units  */}
       {renderSwitch(unit)}
     </div>
   );
